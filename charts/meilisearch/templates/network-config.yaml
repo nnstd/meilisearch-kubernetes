@@ -40,25 +40,23 @@ data:
     done
     REMOTES="${REMOTES}}"
     
-    echo "Configuring network for ${POD_NAME}..."
+    echo "Using ${POD_NAME} as self node"
+    echo "Configuring experimental-features\n"
 
     # Step 1: Enable network in experimental-features
     curl -sS -X PATCH "http://localhost:{{ .Values.service.port }}/experimental-features" \
       -H "Authorization: Bearer ${MEILI_MASTER_KEY}" \
       -H "Content-Type: application/json" \
       -d '{"network": true}' || echo "Warning: Failed to enable sharding"
-    
-    # Step 1: Enable sharding
-    curl -sS -X PATCH "http://localhost:{{ .Values.service.port }}/network" \
-      -H "Authorization: Bearer ${MEILI_MASTER_KEY}" \
-      -H "Content-Type: application/json" \
-      -d '{"sharding": true}' || echo "Warning: Failed to enable sharding"
+
+    echo "Configuring network topology\n"
     
     # Step 2: Configure network topology
     curl -sS -X PATCH "http://localhost:{{ .Values.service.port }}/network" \
       -H "Authorization: Bearer ${MEILI_MASTER_KEY}" \
       -H "Content-Type: application/json" \
-      -d "{\"self\":\"${POD_NAME}\",\"remotes\":${REMOTES}}" || echo "Warning: Failed to configure network"
+      -d "{\"sharding\": true,\"self\":\"${POD_NAME}\",\"remotes\":${REMOTES}}" || echo "Warning: Failed to configure network"
     
+    echo "\n"
     echo "Network configuration completed for ${POD_NAME}"
 {{- end }}
