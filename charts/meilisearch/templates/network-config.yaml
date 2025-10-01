@@ -41,15 +41,21 @@ data:
     REMOTES="${REMOTES}}"
     
     echo "Configuring network for ${POD_NAME}..."
+
+    # Step 1: Enable network
+    curl -sS -X PATCH "http://localhost:{{ .Values.service.port }}/experimental-features" \
+      -H "Authorization: Bearer ${MEILI_MASTER_KEY}" \
+      -H "Content-Type: application/json" \
+      -d '{"network": true}' || echo "Warning: Failed to enable sharding"
     
     # Step 1: Enable sharding
-    curl -X PATCH "http://localhost:{{ .Values.service.port }}/experimental-features/network" \
+    curl -sS -X PATCH "http://localhost:{{ .Values.service.port }}/experimental-features" \
       -H "Authorization: Bearer ${MEILI_MASTER_KEY}" \
       -H "Content-Type: application/json" \
       -d '{"sharding": true}' || echo "Warning: Failed to enable sharding"
     
     # Step 2: Configure network topology
-    curl -X PATCH "http://localhost:{{ .Values.service.port }}/experimental-features/network" \
+    curl -sS -X PATCH "http://localhost:{{ .Values.service.port }}/network" \
       -H "Authorization: Bearer ${MEILI_MASTER_KEY}" \
       -H "Content-Type: application/json" \
       -d "{\"self\":\"${POD_NAME}\",\"remotes\":${REMOTES}}" || echo "Warning: Failed to configure network"
