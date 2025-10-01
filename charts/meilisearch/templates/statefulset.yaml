@@ -5,8 +5,8 @@ metadata:
   labels:
     {{- include "meilisearch.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount | default 1 }}
-  serviceName: {{ template "meilisearch.fullname" . }}
+  replicas: {{ if .Values.sharding.enabled }}{{ .Values.sharding.replicaCount }}{{ else }}{{ .Values.replicaCount | default 1 }}{{ end }}
+  serviceName: {{ if .Values.sharding.enabled }}{{ template "meilisearch.fullname" . }}-headless{{ else }}{{ template "meilisearch.fullname" . }}{{ end }}
   selector:
     matchLabels:
       {{- include "meilisearch.selectorLabels" . | nindent 6 }}
@@ -39,19 +39,27 @@ spec:
         - name: tmp
           emptyDir: {}
         {{- if .Values.persistence.enabled }}
+        {{- if not .Values.sharding.enabled }}
         - name: {{ .Values.persistence.volume.name }}
           persistentVolumeClaim:
             claimName: {{ if .Values.persistence.existingClaim }}{{ .Values.persistence.existingClaim }}{{- else }}{{ include "meilisearch.fullname" . }}{{- end }}
+        {{- end }}
         {{- else }}
         - name: {{ .Values.persistence.volume.name }}
           emptyDir: {}
+        {{- end }}
+        {{- if .Values.sharding.enabled }}
+        - name: network-config
+          configMap:
+            name: {{ include "meilisearch.fullname" . }}-network-config
+            defaultMode: 0755
         {{- end }}
         {{- if .Values.volumes }}
 {{ toYaml .Values.volumes | indent 8 }}
         {{- end }}
 
-      {{ if .Values.initContainers }}
       initContainers:
+      {{- if .Values.initContainers }}
         {{ toYaml .Values.initContainers | nindent 8 }}
       {{- end }}
             
@@ -111,6 +119,63 @@ spec:
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
+          {{- if .Values.sharding.enabled }}
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    # Wait a bit for Meilisearch to fully initialize
+                    sleep 5
+          {{- end }}
+      {{- if .Values.sharding.enabled }}
+        - name: network-configurator
+          image: curlimages/curl:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Wait for main container to be ready
+              sleep 10
+              # Run the network configuration script
+              /scripts/configure-network.sh
+              # Keep the container running
+              echo "Network configuration completed. Sleeping..."
+              sleep infinity
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MEILI_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "secretMasterKeyName" . }}
+                  key: MEILI_MASTER_KEY
+            - name: SEARCH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.sharding.network.auth.existingSecret }}{{ .Values.sharding.network.auth.existingSecret }}{{ else }}{{ include "meilisearch.fullname" . }}-sharding-keys{{ end }}
+                  key: {{ if .Values.sharding.network.auth.existingSecretSearchApiKey }}{{ .Values.sharding.network.auth.existingSecretSearchApiKey }}{{ else }}searchApiKey{{ end }}
+            - name: WRITE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.sharding.network.auth.existingSecret }}{{ .Values.sharding.network.auth.existingSecret }}{{ else }}{{ include "meilisearch.fullname" . }}-sharding-keys{{ end }}
+                  key: {{ if .Values.sharding.network.auth.existingSecretWriteApiKey }}{{ .Values.sharding.network.auth.existingSecretWriteApiKey }}{{ else }}writeApiKey{{ end }}
+          volumeMounts:
+            - name: network-config
+              mountPath: /scripts
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 100
+            capabilities:
+              drop:
+                - ALL
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      {{- end }}
       {{- if .Values.containers }}
         {{ toYaml .Values.containers | nindent 8 }}
       {{- end }}
@@ -126,3 +191,25 @@ spec:
       tolerations:
 {{ toYaml . | indent 8 }}
     {{- end }}
+  {{- if and .Values.sharding.enabled .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ .Values.persistence.volume.name }}
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode | quote }}
+        {{- if .Values.persistence.storageClass }}
+        {{- if (eq "-" .Values.persistence.storageClass) }}
+        storageClassName: ""
+        {{- else }}
+        storageClassName: {{ .Values.persistence.storageClass | quote }}
+        {{- end }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+  {{- end }}

@@ -22,7 +22,7 @@ image:
   # -- Meilisearch image name
   repository: getmeili/meilisearch
   # -- Meilisearch image tag
-  tag: v1.18.0
+  tag: v1.19.0
   # -- Meilisearch image pull policy
   pullPolicy: IfNotPresent
   # -- Secret to authenticate against the docker registry
@@ -50,6 +50,34 @@ auth:
 
 # -- Additional environment variables from ConfigMap or secrets
 envFrom: []
+
+# Sharding configuration for horizontal scaling (Meilisearch EE feature)
+# Requires Meilisearch v1.19+ Enterprise Edition
+# See: https://www.meilisearch.com/blog/horizontal-scaling-with-sharding
+sharding:
+  # -- Enable sharding for horizontal scaling across multiple replicas
+  enabled: false
+  # -- Number of replicas for the sharded cluster (must be > 1 when sharding is enabled)
+  replicaCount: 3
+  # -- Configuration for network topology
+  network:
+    # -- Enable experimental network features (required for sharding)
+    experimentalFeatures: true
+    # -- API keys for inter-node communication
+    # The search API key must have permission to search in the relevant indexes
+    # The write API key must have the documents.add permission
+    auth:
+      # -- Use existing secret for API keys (recommended for production)
+      # Secret should contain 'searchApiKey' and 'writeApiKey' keys
+      existingSecret: ""
+      # -- If using existingSecret, specify the keys to use
+      # If not specified, defaults to 'searchApiKey' and 'writeApiKey'
+      existingSecretSearchApiKey: ""
+      existingSecretWriteApiKey: ""
+      # -- Search API key for inter-node search operations
+      searchApiKey: ""
+      # -- Write API key for inter-node document operations
+      writeApiKey: ""
 
 serviceAccount:
   # You can use a specific pre-created service account instead of

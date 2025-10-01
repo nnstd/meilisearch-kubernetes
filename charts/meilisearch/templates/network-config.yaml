@@ -1,0 +1,58 @@
+{{- if .Values.sharding.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "meilisearch.fullname" . }}-network-config
+  labels:
+    {{- include "meilisearch.labels" . | nindent 4 }}
+data:
+  configure-network.sh: |
+    #!/bin/sh
+    set -e
+    
+    # Extract pod ordinal from hostname
+    POD_ORDINAL=${HOSTNAME##*-}
+    POD_NAME="node-${POD_ORDINAL}"
+    
+    # Wait for Meilisearch to be ready
+    echo "Waiting for Meilisearch to be ready..."
+    until curl -sf http://localhost:{{ .Values.service.port }}/health > /dev/null 2>&1; do
+      echo "Waiting for Meilisearch..."
+      sleep 2
+    done
+    echo "Meilisearch is ready!"
+    
+    # Build the remotes JSON object
+    REMOTES="{"
+    REPLICA_COUNT={{ .Values.sharding.replicaCount }}
+    FIRST=true
+    
+    for i in $(seq 0 $((REPLICA_COUNT - 1))); do
+      if [ "$i" != "$POD_ORDINAL" ]; then
+        if [ "$FIRST" = false ]; then
+          REMOTES="${REMOTES},"
+        fi
+        FIRST=false
+        NODE_NAME="node-${i}"
+        NODE_URL="http://{{ include "meilisearch.fullname" . }}-${i}.{{ include "meilisearch.fullname" . }}-headless.${NAMESPACE}.svc.cluster.local:{{ .Values.service.port }}"
+        REMOTES="${REMOTES}\"${NODE_NAME}\":{\"url\":\"${NODE_URL}\",\"searchApiKey\":\"${SEARCH_API_KEY}\",\"writeApiKey\":\"${WRITE_API_KEY}\"}"
+      fi
+    done
+    REMOTES="${REMOTES}}"
+    
+    echo "Configuring network for ${POD_NAME}..."
+    
+    # Step 1: Enable sharding
+    curl -X PATCH "http://localhost:{{ .Values.service.port }}/experimental-features/network" \
+      -H "Authorization: Bearer ${MEILI_MASTER_KEY}" \
+      -H "Content-Type: application/json" \
+      -d '{"sharding": true}' || echo "Warning: Failed to enable sharding"
+    
+    # Step 2: Configure network topology
+    curl -X PATCH "http://localhost:{{ .Values.service.port }}/experimental-features/network" \
+      -H "Authorization: Bearer ${MEILI_MASTER_KEY}" \
+      -H "Content-Type: application/json" \
+      -d "{\"self\":\"${POD_NAME}\",\"remotes\":${REMOTES}}" || echo "Warning: Failed to configure network"
+    
+    echo "Network configuration completed for ${POD_NAME}"
+{{- end }}

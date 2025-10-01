@@ -50,6 +50,115 @@ For production deployment, the `environment.MEILI_MASTER_KEY` is required. If `M
 
 You can also use `auth.existingMasterKeySecret` to use an existing secret that has the key `MEILI_MASTER_KEY`
 
+## Horizontal Scaling with Sharding
+
+This chart supports Meilisearch's sharding feature for horizontal scaling across multiple replicas. Sharding is available exclusively in **Meilisearch Enterprise Edition v1.19+**.
+
+### Prerequisites
+
+1. **Meilisearch Enterprise Edition**: Version 1.19 or higher
+2. **License**: Required for production use (free for non-production environments under Business Source License 1.1)
+3. **Master Key**: All instances must share the same `MEILI_MASTER_KEY`
+4. **Primary Key**: Indexes must have a `primaryKey` configured before adding documents
+
+### Enabling Sharding
+
+To enable sharding in your Helm deployment:
+
+```yaml
+sharding:
+  enabled: true
+  replicaCount: 3  # Number of nodes in the sharded cluster
+  network:
+    experimentalFeatures: true
+    auth:
+      # Option 1: Let Helm generate random API keys (development)
+      searchApiKey: ""
+      writeApiKey: ""
+      
+      # Option 2: Use existing secret (recommended for production)
+      existingSecret: "my-sharding-keys-secret"
+      # The secret should contain 'searchApiKey' and 'writeApiKey' keys by default
+      
+      # If your existing secret uses different key names:
+      existingSecretSearchApiKey: "customSearchKeyName"
+      existingSecretWriteApiKey: "customWriteKeyName"
+
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: 10Gi
+```
+
+### How It Works
+
+When sharding is enabled:
+
+1. A **headless service** is created for StatefulSet pod-to-pod communication
+2. Each pod gets a unique **persistent volume** for its data partition
+3. A **network configurator sidecar** automatically configures the network topology
+4. Documents sent to any node are automatically distributed across all shards
+5. Each node indexes only its assigned subset of documents using consistent hashing
+
+### Searching Sharded Indexes
+
+To search across a sharded index, use [Meilisearch federated search](https://www.meilisearch.com/docs/learn/multi_search/performing_federated_search):
+
+```bash
+curl -X POST 'http://meilisearch:7700/multi-search' \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "federation": {},
+    "queries": [
+      {
+        "indexUid": "movies",
+        "q": "star wars",
+        "federationOptions": { "remote": "node-0" }
+      },
+      {
+        "indexUid": "movies",
+        "q": "star wars",
+        "federationOptions": { "remote": "node-1" }
+      },
+      {
+        "indexUid": "movies",
+        "q": "star wars",
+        "federationOptions": { "remote": "node-2" }
+      }
+    ]
+  }'
+```
+
+### Architecture
+
+```
+┌─────────────────────────────────────────┐
+│         Load Balancer / Ingress         │
+└────────────────┬────────────────────────┘
+                 │
+      ┌──────────┼──────────┐
+      ▼          ▼          ▼
+  ┌──────┐  ┌──────┐  ┌──────┐
+  │Node-0│  │Node-1│  │Node-2│
+  └───┬──┘  └───┬──┘  └───┬──┘
+      │         │         │
+  ┌───▼──┐  ┌───▼──┐  ┌───▼──┐
+  │ PVC  │  │ PVC  │  │ PVC  │
+  │ 10Gi │  │ 10Gi │  │ 10Gi │
+  └──────┘  └──────┘  └──────┘
+```
+
+### Important Notes
+
+- **Persistence**: When sharding is enabled with persistence, each pod gets its own PVC (using volumeClaimTemplates)
+- **Scaling**: Changing the number of replicas after initial deployment requires careful data rebalancing
+- **Network Configuration**: Automatically handled by the sidecar container
+- **API Keys**: The `searchApiKey` and `writeApiKey` are used for secure inter-node communication
+- **Experimental**: Sharding is an experimental feature as of Meilisearch v1.19
+
+For more information, see the [official Meilisearch sharding documentation](https://www.meilisearch.com/blog/horizontal-scaling-with-sharding).
+
 ## Values
 
 | Key | Type | Default | Description |
