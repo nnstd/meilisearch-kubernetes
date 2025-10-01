@@ -41,7 +41,8 @@ data:
     REMOTES="${REMOTES}}"
     
     echo "Using ${POD_NAME} as self node"
-    echo "Configuring experimental-features\n"
+    echo "Configuring experimental-features"
+    echo ""
 
     # Step 1: Enable network in experimental-features
     curl -sS -X PATCH "http://localhost:{{ .Values.service.port }}/experimental-features" \
@@ -49,7 +50,8 @@ data:
       -H "Content-Type: application/json" \
       -d '{"network": true}' || echo "Warning: Failed to enable sharding"
 
-    echo "Configuring network topology\n"
+    echo "Configuring network topology"
+    echo ""
     
     # Step 2: Configure network topology
     curl -sS -X PATCH "http://localhost:{{ .Values.service.port }}/network" \
@@ -57,6 +59,6 @@ data:
       -H "Content-Type: application/json" \
       -d "{\"sharding\": true,\"self\":\"${POD_NAME}\",\"remotes\":${REMOTES}}" || echo "Warning: Failed to configure network"
     
-    echo "\n"
+    echo ""
     echo "Network configuration completed for ${POD_NAME}"
 {{- end }}
