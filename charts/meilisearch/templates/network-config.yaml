@@ -35,7 +35,7 @@ data:
         FIRST=false
         NODE_NAME="node-${i}"
         NODE_URL="http://{{ include "meilisearch.fullname" . }}-${i}.{{ include "meilisearch.fullname" . }}-headless.${NAMESPACE}.svc.cluster.local:{{ .Values.service.port }}"
-        REMOTES="${REMOTES}\"${NODE_NAME}\":{\"url\":\"${NODE_URL}\",\"searchApiKey\":\"${SEARCH_API_KEY}\",\"writeApiKey\":\"${WRITE_API_KEY}\"}"
+        REMOTES="${REMOTES}\"${NODE_NAME}\":{\"url\":\"${NODE_URL}\",\"searchApiKey\":\"${MEILI_MASTER_KEY}\",\"writeApiKey\":\"${MEILI_MASTER_KEY}\"}"
       fi
     done
     REMOTES="${REMOTES}}"

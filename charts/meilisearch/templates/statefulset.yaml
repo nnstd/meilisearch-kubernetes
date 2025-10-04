@@ -154,16 +154,6 @@ spec:
                 secretKeyRef:
                   name: {{ template "secretMasterKeyName" . }}
                   key: MEILI_MASTER_KEY
-            - name: SEARCH_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ if .Values.sharding.network.auth.existingSecret }}{{ .Values.sharding.network.auth.existingSecret }}{{ else }}{{ include "meilisearch.fullname" . }}-sharding-keys{{ end }}
-                  key: {{ if .Values.sharding.network.auth.existingSecretSearchApiKey }}{{ .Values.sharding.network.auth.existingSecretSearchApiKey }}{{ else }}searchApiKey{{ end }}
-            - name: WRITE_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ if .Values.sharding.network.auth.existingSecret }}{{ .Values.sharding.network.auth.existingSecret }}{{ else }}{{ include "meilisearch.fullname" . }}-sharding-keys{{ end }}
-                  key: {{ if .Values.sharding.network.auth.existingSecretWriteApiKey }}{{ .Values.sharding.network.auth.existingSecretWriteApiKey }}{{ else }}writeApiKey{{ end }}
           volumeMounts:
             - name: network-config
               mountPath: /scripts
